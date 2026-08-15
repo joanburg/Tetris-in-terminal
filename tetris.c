@@ -11,6 +11,7 @@
 
 #define WIDTH 10
 #define HEIGHT 20
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void printBoard(int board[HEIGHT][WIDTH]) {
 
@@ -64,7 +65,9 @@ void clearPreviousPiece(int board[HEIGHT][WIDTH], int piece[4][4], int x, int y)
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             if (piece[i][j] == 1) {
+                pthread_mutex_lock(&mutex);
                 board[y + i][x + j] = 0;
+                pthread_mutex_unlock(&mutex);
             }
         }
     }
@@ -74,9 +77,13 @@ void renderCurrentPieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int x,
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             if (piece[i][j] == 1) {
+                pthread_mutex_lock(&mutex);
                 board[y + i][x + j] = 1;
+                pthread_mutex_unlock(&mutex);
             } else if (board[y + i][x + j] != 1 && board[y + i][x + j] != 2) {
+                pthread_mutex_lock(&mutex);
                 board[y + i][x + j] = 0;
+                pthread_mutex_unlock(&mutex);
             } 
         }
     }
@@ -85,15 +92,16 @@ void renderCurrentPieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int x,
 void rotatePieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
     clearPreviousPiece(board, piece, *x, *y);
 
+    int rotatedPiece[4][4] = {0};
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             if (piece[i][j] == 1) {
-                int temp = piece[i][j];
-                piece[i][j] = piece[j][3 - i];
-                piece[j][3 - i] = temp;
+                rotatedPiece[j][3 - i] = 1;
             }
         }
     }
+
+    memcpy(piece, rotatedPiece, sizeof(rotatedPiece));
 
     renderCurrentPieceOnBoard(board, piece, *x, *y);
 }
@@ -103,9 +111,16 @@ void randomNumberGenerator(int *number) {
     *number = (int) rand() % 7;
 }
 
+char pieceIdGenerator(int pieceType) {
+    char pieceIds[7] = {'I', 'Z', 'S', 'T', 'L', 'J', 'O'};
+    return pieceIds[pieceType];
+}
+
 void pieceFall(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
     clearPreviousPiece(board, piece, *x, *y);
+    pthread_mutex_lock(&mutex);
     (*y)++;
+    pthread_mutex_unlock(&mutex);
     renderCurrentPieceOnBoard(board, piece, *x, *y);
 }
 
@@ -143,6 +158,20 @@ void placePieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y
                 board[*y + i][*x + j] = 2;
             }
         }
+    }
+}
+
+void *fall(void *args) {
+    struct arguments {
+        int (*board)[WIDTH];
+        int (*piece)[4];
+        int *x;
+        int *y;
+    };
+    struct arguments arg = *(struct arguments *)args;
+    while(1) {
+        Sleep(10000);
+        pieceFall(arg.board, arg.piece, arg.x, arg.y);
     }
 }
 
@@ -194,10 +223,13 @@ int main() {
         int shape[4][4];
         int x;
         int y;
+        char id;
     };
 
     bool newPiece = 1;
 
+    pthread_t fallThread;
+    bool fallThreadRunning = false;
 
     int currentPiece = 0;
     randomNumberGenerator(&currentPiece);
@@ -205,6 +237,7 @@ int main() {
     memcpy(current.shape, pieces[currentPiece], sizeof(current.shape));
     current.x = 3;
     current.y = 0;
+    current.id = pieceIdGenerator(currentPiece);
     renderCurrentPieceOnBoard(board, current.shape, current.x, current.y);
     newPiece = 0;
 
@@ -212,14 +245,35 @@ int main() {
     while(1) {
         
         if(newPiece) {
+        
+        if(fallThreadRunning) {
+            pthread_cancel(fallThread);
+            fallThreadRunning = false;
+        }
          currentPiece = 0;
          randomNumberGenerator(&currentPiece);
          memset(&current, 0, sizeof(current)); 
          memcpy(current.shape, pieces[currentPiece], sizeof(current.shape));
          current.x = 3;
          current.y = 0;
+         current.id = pieceIdGenerator(currentPiece);
          renderCurrentPieceOnBoard(board, current.shape, current.x, current.y);
          newPiece = 0;
+
+         struct arguments {
+             int (*board)[WIDTH];
+             int (*piece)[4];
+             int *x;
+             int *y;
+         };
+
+         struct arguments *args = (struct arguments *)malloc(sizeof(struct arguments));
+         args->board = board;
+         args->piece = current.shape;
+         args->x = &current.x;
+         args->y = &current.y;
+         pthread_create(&fallThread, NULL, fall, args);
+         fallThreadRunning = true;
         }
 
         if(_kbhit()) {
@@ -244,10 +298,8 @@ int main() {
             newPiece = 1;
         }
 
-        pieceFall(board, current.shape, &current.x, &current.y);
-        Sleep(500);
+        Sleep(100);
         clearScreen();
-
         printBoard(board);
     }
 
