@@ -9,7 +9,7 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#define WIDTH 10
+#define WIDTH 11
 #define HEIGHT 20
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -35,11 +35,11 @@ void clearScreen() {
     system("cls");
 }
 
-bool checkOutOfBoundsLaterally(int piece[4][4], int *x, int *y) {
+bool checkOutOfBoundsLaterally(int piece[4][4], int x, int y) {
     for(int i = 0; i < 4; i++) {
         for(int j = 0; j < 4; j++) {
             if(piece[i][j]) {
-                if(*x + j < 0 || *x + j >= WIDTH) {
+                if(x + j < 1|| x + j >= WIDTH - 1) {
                     return true;
                 }
             }
@@ -52,7 +52,11 @@ bool checkCollision(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < 4; j++) {
             if (piece[i][j]) {
-                if (board[*y + i][*x + j] == 2 || *y + i >= HEIGHT) {
+                int nextY = *y + i + 1;
+                if (nextY >= HEIGHT - 1) {
+                    return true;
+                }
+                if (board[nextY][*x + j] == 2) {
                     return true;
                 }
             }
@@ -89,8 +93,7 @@ void renderCurrentPieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int x,
     }
 }
 
-void rotatePieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
-    clearPreviousPiece(board, piece, *x, *y);
+void rotatePieceOnBoardClockwise(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
 
     int rotatedPiece[4][4] = {0};
     for (int i = 0; i < 4; i++) {
@@ -101,6 +104,11 @@ void rotatePieceOnBoard(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *
         }
     }
 
+    if(checkOutOfBoundsLaterally(rotatedPiece, *x, *y)) {
+        return;
+    }
+
+    clearPreviousPiece(board, piece, *x, *y);
     memcpy(piece, rotatedPiece, sizeof(rotatedPiece));
 
     renderCurrentPieceOnBoard(board, piece, *x, *y);
@@ -129,12 +137,11 @@ void pieceInstantFall(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y)
     while(!checkCollision(board, piece, x, y)) {
         (*y)++;
     }
-    (*y)--;
     renderCurrentPieceOnBoard(board, piece, *x, *y);
 }
 
 void movePieceLeft(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
-    if(checkOutOfBoundsLaterally(piece, x, y)) {
+    if(checkOutOfBoundsLaterally(piece, *x - 1, *y)) {
         return;
     }
     clearPreviousPiece(board, piece, *x, *y);
@@ -143,7 +150,7 @@ void movePieceLeft(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
 }
 
 void movePieceRight(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
-    if(checkOutOfBoundsLaterally(piece,  x, y)) {
+    if(checkOutOfBoundsLaterally(piece, *x + 1, *y)) {
         return;
     }
     clearPreviousPiece(board, piece, *x, *y);
@@ -171,6 +178,9 @@ void *fall(void *args) {
     struct arguments arg = *(struct arguments *)args;
     while(1) {
         Sleep(10000);
+        if(checkCollision(arg.board, arg.piece, arg.x, arg.y)) {
+            break;   
+        }
         pieceFall(arg.board, arg.piece, arg.x, arg.y);
     }
 }
@@ -281,7 +291,7 @@ int main() {
             if(key == 27) { //esc
                 break;
             } else if(key == 72) { //up
-                rotatePieceOnBoard(board, current.shape, &current.x, &current.y);
+                rotatePieceOnBoardClockwise(board, current.shape, &current.x, &current.y);
             } else if(key == 80) { //down
                 pieceFall(board, current.shape, &current.x, &current.y);
             } else if(key == 77) { //right  
