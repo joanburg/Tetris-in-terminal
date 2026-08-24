@@ -114,6 +114,27 @@ void rotatePieceOnBoardClockwise(int board[HEIGHT][WIDTH], int piece[4][4], int 
     renderCurrentPieceOnBoard(board, piece, *x, *y);
 }
 
+void rotatePieceOnBoardCounterClockwise(int board[HEIGHT][WIDTH], int piece[4][4], int *x, int *y) {
+
+    int rotatedPiece[4][4] = {0};
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            if (piece[i][j] == 1) {
+                rotatedPiece[3 - j][i] = 1;
+            }
+        }
+    }
+
+    if(checkOutOfBoundsLaterally(rotatedPiece, *x, *y)) {
+        return;
+    }
+
+    clearPreviousPiece(board, piece, *x, *y);
+    memcpy(piece, rotatedPiece, sizeof(rotatedPiece));
+
+    renderCurrentPieceOnBoard(board, piece, *x, *y);
+}
+
 void randomNumberGenerator(int *number) {
     srand(time(NULL));
     *number = (int) rand() % 7;
@@ -182,6 +203,37 @@ void *fall(void *args) {
             break;   
         }
         pieceFall(arg.board, arg.piece, arg.x, arg.y);
+    }
+}
+
+void clearFullLines(int board[HEIGHT][WIDTH]) {
+    for (int i = 0; i < HEIGHT - 1; i++) {
+        bool fullLine = true;
+        for (int j = 1; j < WIDTH - 1; j++) {
+            if (board[i][j] != 2) {
+                fullLine = false;
+                break;
+            }
+        }
+        if (fullLine) {
+            for (int k = i; k > 0; k--) {
+                for (int j = 1; j < WIDTH - 1; j++) {
+                    board[k][j] = board[k - 1][j];
+                }
+            }
+            for (int j = 1; j < WIDTH - 1; j++) {
+                board[0][j] = 0;
+            }
+        }
+    }
+}
+
+void detectOverflow(int board[HEIGHT][WIDTH]) {
+    for (int j = 1; j < WIDTH - 1; j++) {
+        if (board[0][j] == 2) {
+            printf("Game Over!\n");
+            exit(0);
+        }
     }
 }
 
@@ -292,6 +344,8 @@ int main() {
                 break;
             } else if(key == 72) { //up
                 rotatePieceOnBoardClockwise(board, current.shape, &current.x, &current.y);
+            } else if(key == 122) { //z
+                rotatePieceOnBoardCounterClockwise(board, current.shape, &current.x, &current.y);
             } else if(key == 80) { //down
                 pieceFall(board, current.shape, &current.x, &current.y);
             } else if(key == 77) { //right  
@@ -305,6 +359,8 @@ int main() {
 
         if(checkCollision(board, current.shape, &current.x, &current.y)) {
             placePieceOnBoard(board, current.shape, &current.x, &current.y);
+            clearFullLines(board);
+            detectOverflow(board);
             newPiece = 1;
         }
 
